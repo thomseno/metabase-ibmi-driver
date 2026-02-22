@@ -5,7 +5,7 @@
   {:provided
    {:dependencies [
      [metabase-core "1.0.0-SNAPSHOT"]
-     [net.sf.jt400/jt400 "21.0.3"]
+     [net.sf.jt400/jt400 "21.0.6"]
    ]}
 
    :clean-targets [:target-path "build/js/output"]

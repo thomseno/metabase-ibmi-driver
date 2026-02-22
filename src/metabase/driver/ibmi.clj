@@ -11,13 +11,13 @@
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
    [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
    [metabase.driver.sql.parameters.substitution :as sql.params.substitution]
-   [metabase.driver.sql.query-processor :as sql.qp]
-   [metabase.driver.sql.util :as sql.u]
+   [metabase.driver.sql.query-processor :as sql.qp] 
    [metabase.util.date-2 :as u.date]
    [honey.sql :as sql]
    [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.log :as log]
    [metabase.driver.sql-jdbc.connection.ssh-tunnel :as ssh]
+   [metabase.driver.sql-jdbc.sync.describe-database :as describe]
    [schema.core :as s])
   (:import [java.sql ResultSet Types]
            java.util.Date)
@@ -31,16 +31,16 @@
 
 (driver/register! :ibmi, :parent :sql-jdbc)
 
-(doseq [[feature supported?] {:connection-impersonation  false 
-                              :describe-fields           true 
-                              :describe-fks              true 
+(doseq [[feature supported?] {:connection-impersonation  false
+                              :describe-fields           true
+                              :describe-fks              true
                               :native-parameters         false
                               :upload-with-auto-pk       true
                               :uuid-type                 false
                               :identifiers-with-spaces   false
                               :nested-field-columns      false
                               :test/jvm-timezone-setting false}]
-  (defmethod driver/database-supports? [:redshift feature] [_driver _feat _db] supported?))
+  (defmethod driver/database-supports? [:ibmi feature] [_driver _feature _db] supported?))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                             metabase.driver impls                                              |
@@ -82,7 +82,7 @@
 ;;(defmethod sql.qp/date [:ibmi :minute-of-hour]  [_ _ expr] (::h2x/extract :minute expr))
 (defmethod sql.qp/date [:ibmi :hour]            [_ _ expr] (h2x/hour expr))
 ;;(defmethod sql.qp/date [:ibmi :hour-of-day]     [_ _ expr] (::h2x/extract :hour expr))
-(defmethod sql.qp/date [:ibmi :day]             [_ _ expr] expr) 
+(defmethod sql.qp/date [:ibmi :day]             [_ _ expr] expr)
 (defmethod sql.qp/date [:ibmi :day-of-month]    [_ _ expr] (::h2x/extract :day expr))
 (defmethod sql.qp/date [:ibmi :week]
   [_ _ expr]
@@ -101,35 +101,35 @@
 
 (defmethod sql.qp/add-interval-honeysql-form :ibmi [_ hsql-form amount unit]
   (h2x/+ (h2x/->timestamp hsql-form) (case unit
-    :second  [:raw (format "%d seconds" (int amount))]
-    :minute  [:raw (format "%d minutes" (int amount))]
-    :hour    [:raw (format "%d hours" (int amount))]
-    :day     [:raw (format "%d days" (int amount))]
-    :week    [:raw (format "%d days" (int (* amount 7)))]
-    :month   [:raw (format "%d months" (int amount))]
-    :quarter [:raw (format "%d months" (int (* amount 3)))]
-    :year    [:raw (format "%d years" (int amount))]
-  )))
+                                       :second  [:raw (format "%d seconds" (int amount))]
+                                       :minute  [:raw (format "%d minutes" (int amount))]
+                                       :hour    [:raw (format "%d hours" (int amount))]
+                                       :day     [:raw (format "%d days" (int amount))]
+                                       :week    [:raw (format "%d days" (int (* amount 7)))]
+                                       :month   [:raw (format "%d months" (int amount))]
+                                       :quarter [:raw (format "%d months" (int (* amount 3)))]
+                                       :year    [:raw (format "%d years" (int amount))])))
 
 (defmethod sql.qp/unix-timestamp->honeysql [:ibmi :seconds] [_ _ expr]
   (h2x/+ [:raw "timestamp('1970-01-01 00:00:00')"] [:raw (format "%d seconds" (int expr))])
 
-(defmethod sql.qp/unix-timestamp->honeysql [:ibmi :milliseconds] [_ _ expr]
-  (h2x/+ [:raw "timestamp('1970-01-01 00:00:00')"] [:raw (format "%d seconds" (int (/ expr 1000)))])))
+  (defmethod sql.qp/unix-timestamp->honeysql [:ibmi :milliseconds] [_ _ expr]
+    (h2x/+ [:raw "timestamp('1970-01-01 00:00:00')"] [:raw (format "%d seconds" (int (/ expr 1000)))])))
 
 (def ^:private now [:raw "current timestamp"])
 
 (defmethod sql.qp/current-datetime-honeysql-form :ibmi [_] now)
 
-(defmethod sql.qp/->honeysql [:ibmi Boolean]
-  [_ bool]
-  (if bool 1 0))
+;; IBM i >= 7.5 support boolean.  IF enabled, the method
+;; (defmethod sql.qp/->honeysql [:ibmi Boolean]
+;;   [_ bool]
+;;   (if bool 1 0))
 
 (defmethod sql.qp/->honeysql [:ibmi :substring]
   [driver [_ arg start length]]
-  		(if length
-    	[:substr (sql.qp/->honeysql driver arg) (sql.qp/->honeysql driver start) [:min [:length (sql.qp/->honeysql driver arg)] (sql.qp/->honeysql driver length)]]
-    	[:substr (sql.qp/->honeysql driver arg) (sql.qp/->honeysql driver start)]))
+  (if length
+    [:substr (sql.qp/->honeysql driver arg) (sql.qp/->honeysql driver start) [:min [:length (sql.qp/->honeysql driver arg)] (sql.qp/->honeysql driver length)]]
+    [:substr (sql.qp/->honeysql driver arg) (sql.qp/->honeysql driver start)]))
 
 
 ;; Use LIMIT OFFSET support DB2 v9.7 https://www.ibm.com/developerworks/community/blogs/SQLTips4DB2LUW/entry/limit_offset?lang=en
@@ -137,8 +137,8 @@
 ;;(defmethod sql.qp/apply-top-level-clause [:ibmi :limit]
 ;;  [_ _ honeysql-query {value :limit}]
 ;;  {:select [:*]
-   ;; if `honeysql-query` doesn't have a `SELECT` clause yet (which might be the case when using a source query) fall
-   ;; back to including a `SELECT *` just to make sure a valid query is produced
+;; if `honeysql-query` doesn't have a `SELECT` clause yet (which might be the case when using a source query) fall
+;; back to including a `SELECT *` just to make sure a valid query is produced
 ;;  :from   [(-> (merge {:select [:*]}
 ;;                       honeysql-query)
 ;;                (update :select sql.u/select-clause-deduplicate-aliases))]
@@ -167,11 +167,11 @@
 ;; Maybe it could not to be necessary with the use of DB2_DEFERRED_PREPARE_SEMANTICS
 (defmethod sql.qp/->honeysql [:ibmi Date]
   [_ date]
-  		(h2x/->timestamp (t/format "yyyy-MM-dd HH:mm:ss" date))) ;;v0.34.x needs it?
+  (h2x/->timestamp (t/format "yyyy-MM-dd HH:mm:ss" date))) ;;v0.34.x needs it?
 
 (defmethod sql.qp/->honeysql [:ibmi Timestamp]
   [_ date]
-  		(h2x/->timestamp (t/format "yyyy-MM-dd HH:mm:ss" date)))
+  (h2x/->timestamp (t/format "yyyy-MM-dd HH:mm:ss" date)))
 
 
 ;; MEGA HACK from sqlite.clj ;;v0.34.x
@@ -258,14 +258,13 @@
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
 (defmethod sql-jdbc.conn/connection-details->spec :ibmi [_ {:keys [host port dbname ssl]
-                                                           :or   {host "localhost", port 8471, dbname ""}
-                                                           :as   details}]
+                                                            :or   {host "localhost", port 8471, dbname ""}
+                                                            :as   details}]
   (-> (merge {:classname   "com.ibm.as400.access.AS400JDBCDriver"
               :subprotocol "as400"
               :subname     (str "//" host ":" port "/" dbname)
               ;; :enableSslConnection (boolean ssl)
-              :sslConnection (boolean ssl)
-              }
+              :sslConnection (boolean ssl)}
              (dissoc details :host :port :dbname :ssl))
       (sql-jdbc.common/handle-additional-options details, :seperator-style :semicolon))) ;; todo comprendre pourquoi changer seperator en separator ne fonctionne pas
 
@@ -277,8 +276,7 @@
 (def ^:private database-type->base-type
   (some-fn (sql-jdbc.sync/pattern-based-database-type->base-type
             [])  ; no changes needed here
-           {
-            :BIGINT       :type/BigInteger
+           {:BIGINT       :type/BigInteger
             :BINARY       :type/*
             :BLOB         :type/*
             :BOOLEAN      :type/Boolean
@@ -378,36 +376,34 @@
 (defmethod sql-jdbc.execute/set-timezone-sql :ibmi [_]
   "SET SESSION TIME ZONE = %s")
 
+(defmethod driver/db-tables :ibmi
+  [driver metadata schema-or-nil db-name-or-nil]
+  (describe/jdbc-get-tables driver metadata db-name-or-nil schema-or-nil "%"
+                                 ["TABLE" "PARTITIONED TABLE" "VIEW" "FOREIGN TABLE" "MATERIALIZED VIEW"
+                                  "MATERIALIZED QUERY TABLE" "EXTERNAL TABLE" "DYNAMIC_TABLE"]))
 
-;; (defn db-tables :ibmi 
-;;   [driver ^DatabaseMetaData metadata ^String schema-or-nil ^String db-name-or-nil]
-;;   ;; Add DB2 MATERIALIZED QUERY TABLE
-;;   (sql-jdbc.sync/jdbc-get-tables driver metadata db-name-or-nil schema-or-nil "%"
-;;                                  ["TABLE" "PARTITIONED TABLE" "VIEW" "FOREIGN TABLE" "MATERIALIZED VIEW"
-;;                                   "MATERIALIZED QUERY TABLE" "EXTERNAL TABLE" "DYNAMIC_TABLE"]))
-
-(defmethod driver/describe-database :ibmi
-  [driver database]
-  (sql-jdbc.execute/do-with-connection-with-options
-   driver database nil
-   (fn [^java.sql.Connection conn]
-     ;; Retrieve tables from DB2's metadata
-     (let [metadata (.getMetaData conn)
-           result-set (.getTables metadata nil nil "%" (into-array ["TABLE" "VIEW" "MATERIALIZED QUERY TABLE" "ALIAS"]))]
-       (with-open [rset result-set]
-         ;; Process each table
-         (let [tables (loop [acc #{}]
-                        (if (.next rset)
-                          (let [table-name (.getString rset "TABLE_NAME")
-                                schema-name (.getString rset "TABLE_SCHEM")
-                                remarks (.getString rset "REMARKS")]
-                            (recur (conj acc {:name table-name
-                                              :schema schema-name
-                                              :description remarks})))
-                          acc))]
-           ;; Return DatabaseMetadata
-           {:tables tables
-            :version (.getDatabaseProductVersion metadata)}))))))
+;; (defmethod driver/describe-database :ibmi
+;;   [driver database]
+;;   (sql-jdbc.execute/do-with-connection-with-options
+;;    driver database nil
+;;    (fn [^java.sql.Connection conn]
+;;      ;; Retrieve tables from DB2's metadata
+;;      (let [metadata (.getMetaData conn)
+;;            result-set (.getTables metadata nil nil "%" (into-array ["TABLE" "VIEW" "MATERIALIZED QUERY TABLE" "ALIAS"]))]
+;;        (with-open [rset result-set]
+;;          ;; Process each table
+;;          (let [tables (loop [acc #{}]
+;;                         (if (.next rset)
+;;                           (let [table-name (.getString rset "TABLE_NAME")
+;;                                 schema-name (.getString rset "TABLE_SCHEM")
+;;                                 remarks (.getString rset "REMARKS")]
+;;                             (recur (conj acc {:name table-name
+;;                                               :schema schema-name
+;;                                               :description remarks})))
+;;                           acc))]
+;;            ;; Return DatabaseMetadata
+;;            {:tables tables
+;;             :version (.getDatabaseProductVersion metadata)}))))))
 
 (defmethod driver/describe-fields :ibmi
   [driver database]

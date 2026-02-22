@@ -1,6 +1,6 @@
 info:
   name: Metabase IBM DB2 for IBM i Driver
-  version: "0.54"
+  version: "1.58"
   description: Allows Metabase to connect to IBM i database.
 driver:
   name: ibmi
