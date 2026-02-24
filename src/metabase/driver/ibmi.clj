@@ -32,8 +32,8 @@
 (driver/register! :ibmi, :parent :sql-jdbc)
 
 (doseq [[feature supported?] {:connection-impersonation  false
-                              :describe-fields           true
-                              :describe-fks              true
+                            ;;  :describe-fields           false
+                            ;;  :describe-fks              false
                               :native-parameters         false
                               :upload-with-auto-pk       true
                               :uuid-type                 false
@@ -376,12 +376,12 @@
 (defmethod sql-jdbc.execute/set-timezone-sql :ibmi [_]
   "SET SESSION TIME ZONE = %s")
 
-(defmethod driver/db-tables :ibmi
-  [driver metadata schema-or-nil db-name-or-nil]
-  (describe/jdbc-get-tables driver metadata db-name-or-nil schema-or-nil "%"
-                                 ["TABLE" "PARTITIONED TABLE" "VIEW" "FOREIGN TABLE" "MATERIALIZED VIEW"
-                                  "MATERIALIZED QUERY TABLE" "EXTERNAL TABLE" "DYNAMIC_TABLE"]))
-
+;; (defmethod driver/db-tables :ibmi
+;;   [driver metadata schema-or-nil db-name-or-nil]
+;;   (describe/jdbc-get-tables driver metadata db-name-or-nil schema-or-nil "%"
+;;                                  ["TABLE" "PARTITIONED TABLE" "VIEW" "FOREIGN TABLE" "MATERIALIZED VIEW"
+;;                                   "MATERIALIZED QUERY TABLE" "EXTERNAL TABLE" "DYNAMIC_TABLE"]))
+;; 
 ;; (defmethod driver/describe-database :ibmi
 ;;   [driver database]
 ;;   (sql-jdbc.execute/do-with-connection-with-options
@@ -405,69 +405,69 @@
 ;;            {:tables tables
 ;;             :version (.getDatabaseProductVersion metadata)}))))))
 
-(defmethod driver/describe-fields :ibmi
-  [driver database]
-  (sql-jdbc.execute/do-with-connection-with-options
-   driver database nil
-   (fn [^java.sql.Connection conn]
-     ;; Retrieve columns from DB2's metadata
-     (let [metadata (.getMetaData conn)
-           result-set (.getColumns metadata nil nil "%" nil)]
-       (with-open [rset result-set]
-         ;; Process each field (column)
-         (loop [fields []]
-           (if (.next rset)
-             (let [table-name (.getString rset "TABLE_NAME")
-                   schema-name (.getString rset "TABLE_SCHEM")
-                   column-name (.getString rset "COLUMN_NAME")
-                   data-type (.getInt rset "DATA_TYPE") ; SQL type code
-                   type-name (.getString rset "TYPE_NAME") ; DB2-specific type
-                   column-size (.getInt rset "COLUMN_SIZE")
-                   nullable (case (.getInt rset "NULLABLE")
-                              java.sql.DatabaseMetaData/columnNullable true
-                              java.sql.DatabaseMetaData/columnNoNulls false
-                              nil)
-                   remarks (.getString rset "REMARKS")
-                   auto-increment (.getString rset "IS_AUTOINCREMENT")]
-               (recur (conj fields
-                            {:name column-name
-                             :database-type type-name
-                             :base-type (sql-jdbc.sync/database-type->base-type driver data-type type-name)
-                             :database-position (.getInt rset "ORDINAL_POSITION")
-                             :field-comment remarks
-                             :database-is-auto-increment (.equalsIgnoreCase "YES" auto-increment)
-                             :database-required (not nullable)
-                             :table-name table-name
-                             :table-schema schema-name})))
-             ;; Return the processed fields
-             fields)))))))
+;; (defmethod driver/describe-fields :ibmi
+;;   [driver database]
+;;   (sql-jdbc.execute/do-with-connection-with-options
+;;    driver database nil
+;;    (fn [^java.sql.Connection conn]
+;;      ;; Retrieve columns from DB2's metadata
+;;      (let [metadata (.getMetaData conn)
+;;            result-set (.getColumns metadata nil nil "%" nil)]
+;;        (with-open [rset result-set]
+;;          ;; Process each field (column)
+;;          (loop [fields []]
+;;            (if (.next rset)
+;;              (let [table-name (.getString rset "TABLE_NAME")
+;;                    schema-name (.getString rset "TABLE_SCHEM")
+;;                    column-name (.getString rset "COLUMN_NAME")
+;;                    data-type (.getInt rset "DATA_TYPE") ; SQL type code
+;;                    type-name (.getString rset "TYPE_NAME") ; DB2-specific type
+;;                    column-size (.getInt rset "COLUMN_SIZE")
+;;                    nullable (case (.getInt rset "NULLABLE")
+;;                               java.sql.DatabaseMetaData/columnNullable true
+;;                               java.sql.DatabaseMetaData/columnNoNulls false
+;;                               nil)
+;;                    remarks (.getString rset "REMARKS")
+;;                    auto-increment (.getString rset "IS_AUTOINCREMENT")]
+;;                (recur (conj fields
+;;                             {:name column-name
+;;                              :database-type type-name
+;;                              :base-type (sql-jdbc.sync/database-type->base-type driver data-type type-name)
+;;                              :database-position (.getInt rset "ORDINAL_POSITION")
+;;                              :field-comment remarks
+;;                              :database-is-auto-increment (.equalsIgnoreCase "YES" auto-increment)
+;;                              :database-required (not nullable)
+;;                              :table-name table-name
+;;                              :table-schema schema-name})))
+;;              ;; Return the processed fields
+;;              fields)))))))
 
-(defmethod driver/describe-fks :ibmi
-  [driver database table-name]
-  (sql-jdbc.execute/do-with-connection-with-options
-   driver database nil
-   (fn [^java.sql.Connection conn]
-     ;; Retrieve foreign keys for the specified table
-     (let [metadata (.getMetaData conn)
-           result-set (.getImportedKeys metadata nil nil table-name)]
-       (with-open [rset result-set]
-         ;; Process each foreign key
-         (loop [fks []]
-           (if (.next rset)
-             (let [fk-table-name (.getString rset "FKTABLE_NAME")
-                   fk-table-schema (.getString rset "FKTABLE_SCHEM")
-                   fk-column-name (.getString rset "FKCOLUMN_NAME")
-                   pk-table-name (.getString rset "PKTABLE_NAME")
-                   pk-table-schema (.getString rset "PKTABLE_SCHEM")
-                   pk-column-name (.getString rset "PKCOLUMN_NAME")]
-               (recur (conj fks {:fk-table-name    fk-table-name
-                                 :fk-table-schema  fk-table-schema
-                                 :fk-column-name   fk-column-name
-                                 :pk-table-name    pk-table-name
-                                 :pk-table-schema  pk-table-schema
-                                 :pk-column-name   pk-column-name})))
-             fks)))))))
-
+;; (defmethod driver/describe-fks :ibmi
+;;   [driver database table-name]
+;;   (sql-jdbc.execute/do-with-connection-with-options
+;;    driver database nil
+;;    (fn [^java.sql.Connection conn]
+;;      ;; Retrieve foreign keys for the specified table
+;;      (let [metadata (.getMetaData conn)
+;;            result-set (.getImportedKeys metadata nil nil table-name)]
+;;        (with-open [rset result-set]
+;;          ;; Process each foreign key
+;;          (loop [fks []]
+;;            (if (.next rset)
+;;              (let [fk-table-name (.getString rset "FKTABLE_NAME")
+;;                    fk-table-schema (.getString rset "FKTABLE_SCHEM")
+;;                    fk-column-name (.getString rset "FKCOLUMN_NAME")
+;;                    pk-table-name (.getString rset "PKTABLE_NAME")
+;;                    pk-table-schema (.getString rset "PKTABLE_SCHEM")
+;;                    pk-column-name (.getString rset "PKCOLUMN_NAME")]
+;;                (recur (conj fks {:fk-table-name    fk-table-name
+;;                                  :fk-table-schema  fk-table-schema
+;;                                  :fk-column-name   fk-column-name
+;;                                  :pk-table-name    pk-table-name
+;;                                  :pk-table-schema  pk-table-schema
+;;                                  :pk-column-name   pk-column-name})))
+;;              fks)))))))
+;; 
 
 (defmethod sql-jdbc.execute/set-timezone-sql :ibmi
   [_]
